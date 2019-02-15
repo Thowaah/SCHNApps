@@ -1,3 +1,4 @@
+
 /*******************************************************************************
 * SCHNApps                                                                     *
 * Copyright (C) 2015, IGG Group, ICube, University of Strasbourg, France       *
@@ -64,6 +65,8 @@ bool Plugin_SurfaceFeatureLines::enable()
 
 	connect(schnapps_, SIGNAL(schnapps_closing()), this, SLOT(schnapps_closing()));
 
+	//charger un pointeur sur le plugin d'import
+	//voir dans dialog feature lines (schnapps->enable_plugin)
 	return true;
 }
 
@@ -209,6 +212,30 @@ void Plugin_SurfaceFeatureLines::compute_feature_lines(
 	CMap2::VertexAttribute<SCALAR> kmin = map->get_attribute<SCALAR, CMap2::Vertex::ORBIT>(kmin_attribute_name.toStdString());
 	if (!kmin.is_valid())
 		return;
+
+		//CMap2::FaceAttribute<VEC3> bla = ...
+		//CMap2::VertexAttribute<VEC3> vbla = mh->add_attribute<VEC3, CMap2::Vertex::ORBIT>("bla");
+
+	//parcours
+	// map->foreach_cell([&] (CMap2::Face f){
+	// 	VEC3 c(0,0,0);
+	// 	//bla[f] = VEC3();
+	// 	//f.dart[f] = VEC3();
+	// 	map->foreach_incident_vertex(f, [&] (CMap2::Vertex v){
+	// 		c+=position[v];
+	// 	});
+	// 	//bla[f] = c;
+	// });
+	// //inerse
+	// map->foreach_cell([&] (CMap2::Vertex v){
+	// 	VEC3 c(0,0,0);
+	// 	//bla[f] = VEC3();
+	// 	//f.dart[f] = VEC3();
+	// 	map->foreach_incident_vertex(v, [&] (CMap2::Face f){
+	// 		c+=bla[f];
+	// 	});
+	// 	//bla[v] = c;
+	// });
 
 	// compute the feature lines
 	std::vector<VEC3> lines;
