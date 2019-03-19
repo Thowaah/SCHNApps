@@ -189,12 +189,6 @@ void Plugin_SurfaceFeatureLines::schnapps_closing()
 //verifie la régularité d'un triangle
 bool isRegular(CMap2* map, CMap2::Face f, CMap2::VertexAttribute<VEC3>& Ki)
 {
-   // map->foreach_cell([&] (CMap2::Face f){
-        //------------->récupération des sommets
-
-        //VEC3 v1 = Kmax[CMap2::Vertex(f.dart)];
-        //VEC3 v2 = Kmax[CMap2::Vertex(map->phi1(f.dart))];
-        //VEC3 v3 = Kmax[CMap2::Vertex(map->phi_1(f.dart))];
 
         VEC3 v1 = Ki[CMap2::Vertex(f.dart)];
         VEC3 v2 = Ki[CMap2::Vertex(map->phi1(f.dart))];
@@ -248,23 +242,81 @@ bool isRegular(CMap2* map, CMap2::Face f, CMap2::VertexAttribute<VEC3>& Ki)
                 return false;
             }
         }
-
-        //isRegular[f] = true;
-        //isRegular[f] = false;
-    //});
 }
 
 void add_lines(CMap2::VertexAttribute<VEC3> position, std::vector<VEC3>& line_vec, CMap2::Vertex O,CMap2::Vertex v1, CMap2::Vertex v2, double scal1, double scal2){
     VEC3 line_start;
     VEC3 line_end;
 
-    //line_start = position[O]*scal1 + (1-scal1)*position[v1];
     line_start = position[O]*(1-scal1) + (scal1)*position[v1];
-    //line_end = scal2 * position[O] +  (1-scal2)*position[v2];
     line_end = (1-scal2) * position[O] +  scal2*position[v2];
 
     line_vec.push_back(line_start);
     line_vec.push_back(line_end);
+}
+
+void feature_line(CMap2* map, CMap2::VertexAttribute<VEC3>& K, CMap2::VertexAttribute<SCALAR>& e, CMap2::VertexAttribute<VEC3>& position, CMap2::VertexAttribute<SCALAR>& kmax, CMap2::VertexAttribute<SCALAR>& kmin, CMap2::FaceAttribute<SCALAR>& face_area, CMap2::VertexAttribute<SCALAR>& star_area, CMap2::FaceAttribute<VEC3>& grad_k, std::vector<VEC3>& lines){
+    //calcul de la feature line sur chaque face sequentiellement
+    map->foreach_cell([&] (CMap2::Face f){
+
+        if(isRegular(map, f, K)){
+            //pour les 3 vertex de la face
+            map->foreach_incident_vertex(f, [&] (CMap2::Vertex v){
+
+                //double emin = 0.0;
+                double emax_val = 0.0;
+
+                map->foreach_incident_face(v,[&] (CMap2::Face _f){
+                    //emax += K[v].dot(grad_kmax[f]);
+                    emax_val+= face_area[_f] * grad_k[_f].dot(K[v]);
+                });
+
+                e[v] = 1/star_area[v] * emax_val;
+            });
+            //fin calcul emax
+
+            //vérification condition
+            CMap2::Vertex v1 = CMap2::Vertex(f.dart);
+            CMap2::Vertex v2 = CMap2::Vertex(map->phi1(f.dart));
+            CMap2::Vertex v3 = CMap2::Vertex(map->phi_1(f.dart));
+
+            VEC3 n = cgogn::geometry::normal(*map, f, position);
+
+            VEC3 v12 = position[v2] - position[v1];
+            VEC3 v23 = position[v3] - position[v2];
+            VEC3 v31 = position[v1] - position[v3];
+
+            VEC3 grad_e = n.cross(v12)/2*face_area[f] * e[v3] + n.cross(v23)/2*face_area[f] *  e[v1] + n.cross(v31)/2*face_area[f] * e[v2];
+
+            VEC3 sum_K = VEC3(0.0,0.0,0.0);
+            double sum_kmax = 0.0;
+            double sum_kmin = 0.0;
+
+            map->foreach_incident_vertex(f, [&] (CMap2::Vertex v){
+                sum_K += K[v];
+                sum_kmax += kmax[v];
+                sum_kmin += kmin[v];
+            });
+
+            if((grad_e.dot(sum_K)<0) && (std::abs(sum_kmax) > std::abs(sum_kmin))){
+                if(e[v1] > 0 && e[v2] < 0 && e[v3] < 0){
+                    add_lines(position,lines, v1, v2, v3, e[v1]/(e[v1] + -e[v2]) , e[v1]/(e[v1] + -e[v3]));
+                } else if (e[v1] > 0 && e[v2] > 0 && e[v3] < 0){
+                    add_lines(position,lines, v3, v1, v2, -e[v3]/(-e[v3] + e[v1]) , -e[v3]/(-e[v3] + e[v2]));
+                } else if (e[v1] < 0 && e[v2] > 0 && e[v3] < 0){
+                    add_lines(position,lines, v2, v1, v3, e[v2]/(e[v2] + (-e[v1])) , e[v2]/(e[v2] + (-e[v3])));
+                } else if (e[v1] < 0 && e[v2] > 0 && e[v3] > 0){
+                    add_lines(position,lines, v1, v2, v3, -e[v1]/(-e[v1] + e[v2]) , -e[v1]/(-e[v1] + e[v3]));
+                } else if (e[v1] < 0 && e[v2] < 0 && e[v3] > 0){
+                    add_lines(position,lines, v3, v1, v2, e[v3]/(e[v3] + -e[v1]) , e[v3]/(e[v3] + -e[v2]));
+                } else  if(e[v1] > 0 && e[v2] < 0 && e[v3] > 0){
+                    add_lines(position,lines, v2, v1, v3, -e[v2]/(-e[v2] + (e[v1])) , -e[v2]/(-e[v2] + (e[v3])));
+                } else {
+                    return;
+                }
+            }
+        }
+    });
 }
 
 
@@ -309,6 +361,8 @@ void Plugin_SurfaceFeatureLines::compute_feature_lines(
 
     //calcul du gradient sur chaque face
     CMap2::FaceAttribute<VEC3> grad_kmax = mh->add_attribute<VEC3, CMap2::Face::ORBIT>("grad_kmax");
+    CMap2::FaceAttribute<VEC3> grad_kmin = mh->add_attribute<VEC3, CMap2::Face::ORBIT>("grad_kmin");
+
 
     map->foreach_cell([&] (CMap2::Face f)
     {
@@ -322,197 +376,26 @@ void Plugin_SurfaceFeatureLines::compute_feature_lines(
        VEC3 v23 = position[v3] - position[v2];
        VEC3 v31 = position[v1] - position[v3];
 
-       //grad_kmax[f] = n.cross(v12)/2*face_area[f] * kmax[v1] + n.cross(v23)/2*face_area[f] *  kmax[v2];
        grad_kmax[f] = n.cross(v12)/2*face_area[f] * kmax[v3] + n.cross(v23)/2*face_area[f] *  kmax[v1] + n.cross(v31)/2*face_area[f] * kmax[v2];
+       grad_kmin[f] = n.cross(v12)/2*face_area[f] * kmin[v3] + n.cross(v23)/2*face_area[f] *  kmin[v1] + n.cross(v31)/2*face_area[f] * kmin[v2];
+
 
     });
 
-    CMap2::FaceAttribute<VEC3> grad_kmin = mh->add_attribute<VEC3, CMap2::Face::ORBIT>("grad_kmin");
-//idem
+    //CMap2::FaceAttribute<VEC3> grad_kmin = mh->add_attribute<VEC3, CMap2::Face::ORBIT>("grad_kmin");
 
 	//features à afficher
 	CMap2::VertexAttribute<SCALAR> emin = mh->add_attribute<SCALAR, CMap2::Vertex::ORBIT>("emin");
 	CMap2::VertexAttribute<SCALAR> emax = mh->add_attribute<SCALAR, CMap2::Vertex::ORBIT>("emax");
 
-    CMap2::FaceAttribute<bool> regularity = mh->add_attribute<bool, CMap2::Face::ORBIT>("regularity");
-
     //pour afficher
     std::vector<VEC3> lines;
 
-    //calcul de la feature line sur chaque face sequentiellement
-    map->foreach_cell([&] (CMap2::Face f){
-
-        if(isRegular(map, f, Kmax)){
-            regularity[f] = true;
-            //pour les 3 vertex de la face
-            map->foreach_incident_vertex(f, [&] (CMap2::Vertex v){
-
-                //double emin = 0.0;
-                double emax_val = 0.0;
-
-                map->foreach_incident_face(v,[&] (CMap2::Face _f){
-                    //emax += Kmax[v].dot(grad_kmax[f]);
-                    emax_val+= face_area[_f] * grad_kmax[_f].dot(Kmax[v]);
-                });
-
-                emax[v] = 1/star_area[v] * emax_val;
-            });
-            //fin calcul emax
-
-            //vérification condition
-            CMap2::Vertex v1 = CMap2::Vertex(f.dart);
-            CMap2::Vertex v2 = CMap2::Vertex(map->phi1(f.dart));
-            CMap2::Vertex v3 = CMap2::Vertex(map->phi_1(f.dart));
-
-            VEC3 n = cgogn::geometry::normal(*map, f, position);
-
-            VEC3 v12 = position[v2] - position[v1];
-            VEC3 v23 = position[v3] - position[v2];
-            VEC3 v31 = position[v1] - position[v3];
-
-            VEC3 grad_emax = n.cross(v12)/2*face_area[f] * emax[v3] + n.cross(v23)/2*face_area[f] *  emax[v1] + n.cross(v31)/2*face_area[f] * emax[v2];
-
-            VEC3 sum_Kmax = VEC3(0.0,0.0,0.0);
-            double sum_kmax = 0.0;
-            double sum_kmin = 0.0;
-
-            map->foreach_incident_vertex(f, [&] (CMap2::Vertex v){
-                sum_Kmax += Kmax[v];
-                sum_kmax += kmax[v];
-                sum_kmin += kmin[v];
-            });
-
-//void add_lines(std::vector<VEC3>& line_vec, VEC3 O,VEC3 v1, VEC3 v2, double scal1, double scal2)
-            if((grad_emax.dot(sum_Kmax)<0) && (std::abs(sum_kmax) > std::abs(sum_kmin))){
-                if(emax[v1] > 0 && emax[v2] < 0 && emax[v3] < 0){
-                    //add_lines(position,lines, v1, v2, v3, -emax[v1]/(-emax[v1] + emax[v2]) , 1-(-emax[v1]/(-emax[v1] + emax[v3])));
-                    add_lines(position,lines, v1, v2, v3, emax[v1]/(emax[v1] + -emax[v2]) , emax[v1]/(emax[v1] + -emax[v3]));
-                } else if (emax[v1] > 0 && emax[v2] > 0 && emax[v3] < 0){
-                    add_lines(position,lines, v3, v1, v2, -emax[v3]/(-emax[v3] + emax[v1]) , -emax[v3]/(-emax[v3] + emax[v2]));
-                } else if (emax[v1] < 0 && emax[v2] > 0 && emax[v3] < 0){
-                    add_lines(position,lines, v2, v1, v3, emax[v2]/(emax[v2] + (-emax[v1])) , emax[v2]/(emax[v2] + (-emax[v3])));
-                } else if (emax[v1] < 0 && emax[v2] > 0 && emax[v3] > 0){
-                    add_lines(position,lines, v1, v2, v3, -emax[v1]/(-emax[v1] + emax[v2]) , -emax[v1]/(-emax[v1] + emax[v3]));
-                } else if (emax[v1] < 0 && emax[v2] < 0 && emax[v3] > 0){
-                    add_lines(position,lines, v3, v1, v2, emax[v3]/(emax[v3] + -emax[v1]) , emax[v3]/(emax[v3] + -emax[v2]));
-                } else  if(emax[v1] > 0 && emax[v2] < 0 && emax[v3] > 0){
-                    add_lines(position,lines, v2, v1, v3, -emax[v2]/(-emax[v2] + (emax[v1])) , -emax[v2]/(-emax[v2] + (emax[v3])));
-                } else {
-                    return;
-                }
-            }
-        } else {
-            regularity[f] = false;
-             }
-    });
+    //appel à la fonction de calcul
+    feature_line(map,Kmax,emax,position,kmax,kmin,face_area,star_area,grad_kmax,lines);
 
 
-
-
-//    //calcul e_i
-//    map->foreach_cell([&] (CMap2::Vertex v){
-//        //double emin = 0.0;
-//        double emax_val = 0.0;
-
-//        map->foreach_incident_face(v,[&] (CMap2::Face f){
-//            //emax += Kmax[v].dot(grad_kmax[f]);
-//            emax_val+= face_area[f] * grad_kmax[f].dot(Kmax[v]);
-//        });
-
-//        emax[v] = 1/star_area[v] * emax_val;
-//        //
-//        //-------------->récupération de l'aire dans les attributs
-//        //double area;// = ...;
-
-//        //----------->pour chaque triangle qui touche v
-//            //-------------->récupération de l'aire dans les attributs
-//            //-------------->récupération du gradient dans les attributs
-//            //-------------->récupération du vecteur Ki dans les attributs
-
-
-
-//            //e_i += aire_triangle * produiduit scalaire du gradient_i de T et vecteur K_i
-
-//        //pour tout
-//       // emin = 1/star_area[v] * emin;
-//    });
-
-    //parcours
-	// map->foreach_cell([&] (CMap2::Face f){
-	// 	VEC3 c(0,0,0);
-	// 	//bla[f] = VEC3();
-	// 	//f.dart[f] = VEC3();
-	// 	map->foreach_incident_vertex(f, [&] (CMap2::Vertex v){
-    // 		c+=position[v];gedit
-	// 	});
-	// 	//bla[f] = c;
-	// });
-	// //inverse
-	// map->foreach_cell([&] (CMap2::Vertex v){
-	// 	VEC3 c(0,0,0);
-	// 	//bla[f] = VEC3();
-	// 	//f.dart[f] = VEC3();
-	// 	map->foreach_incident_vertex(v, [&] (CMap2::Face f){
-	// 		c+=bla[f];
-	// 	});
-	// 	//bla[v] = c;
-	// });
-
-
-	//verification de la régularité de la face
-
-
-	//scaling kmin/kmax for faces
-    //map->foreach_cell([&] (CMap2::Vertex v){
-        //calcul de l'aire du 1-voisinage ? cellule de voronoi ?
-        //double area = 0.0;
-
-            //--------->parcours des voisins ?
-
-		//kmin et kmax piecewise
-        //double kmin_pw = 3/area * kmin; //conversion ?
-        //double kmax_pw = 3/area * kmax;
-		//-------------->affecter ces valeurs à des attributs de sommets
-    //});
-
-	//calcul du gradient de k_i
-    //map->foreach_cell([&] (CMap2::Face f){
-        //récupération des kmin_pw/kmax_pw des sommets de la face
-
-      //  VEC3 v1;
-      //  VEC3 v2;
-      //  VEC3 v3;
-
-        //calcul aire
-      //  VEC3 v12 = v2 - v1;
-      //  VEC3 v23 = v3 - v2;
-      //  VEC3 v31 = v1 - v3;
-
-        //double d12 = std::sqrt(pow(v12[0],2) + pow(v12[1],2) + pow(v12[2],2));
-        //double d23 = std::sqrt(pow(v23[0],2) + pow(v23[1],2) + pow(v23[2],2));
-        //double d31 = std::sqrt(pow(v31[0],2) + pow(v31[1],2) + pow(v31[2],2));
-
-        //double s = 1/2 * (d12+d23+d31);
-        //double area = std::sqrt(s*(s-d12)*(s-d23)*(s-d31));
-
-        //stocker l'aire ?
-
-		//calcul gradient
-		//---------> récupérer normale
-        //VEC3 normal;
-//        normal * (v1 - v3) / 2*area + normal * (v3 - v2) / 2*area + normal * (v2 - v1) / 2*area;
-
-		//affecter la valeur du gradient à la face
-//	});
-
-
-
-	// compute the feature lines
-    //std::vector<VEC3> lines;
-    //lines.push_back(mh->bb().max());
-    //lines.push_back(mh->bb().min());
-
-	// update render data in corresponding MapParameters
+    //affichage des lignes
 	MapParameters& p = parameters(mh);
 	p.update_lines(lines);
 
