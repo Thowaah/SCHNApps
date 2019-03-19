@@ -258,8 +258,10 @@ void add_lines(CMap2::VertexAttribute<VEC3> position, std::vector<VEC3>& line_ve
     VEC3 line_start;
     VEC3 line_end;
 
-    line_start = position[O]*scal1 + (1-scal1)*position[v1];
-    line_end = scal2 * position[O] +  (1-scal2)*position[v2];
+    //line_start = position[O]*scal1 + (1-scal1)*position[v1];
+    line_start = position[O]*(1-scal1) + (scal1)*position[v1];
+    //line_end = scal2 * position[O] +  (1-scal2)*position[v2];
+    line_end = (1-scal2) * position[O] +  scal2*position[v2];
 
     line_vec.push_back(line_start);
     line_vec.push_back(line_end);
@@ -332,6 +334,8 @@ void Plugin_SurfaceFeatureLines::compute_feature_lines(
 	CMap2::VertexAttribute<SCALAR> emin = mh->add_attribute<SCALAR, CMap2::Vertex::ORBIT>("emin");
 	CMap2::VertexAttribute<SCALAR> emax = mh->add_attribute<SCALAR, CMap2::Vertex::ORBIT>("emax");
 
+    CMap2::FaceAttribute<bool> regularity = mh->add_attribute<bool, CMap2::Face::ORBIT>("regularity");
+
     //pour afficher
     std::vector<VEC3> lines;
 
@@ -339,6 +343,7 @@ void Plugin_SurfaceFeatureLines::compute_feature_lines(
     map->foreach_cell([&] (CMap2::Face f){
 
         if(isRegular(map, f, Kmax)){
+            regularity[f] = true;
             //pour les 3 vertex de la face
             map->foreach_incident_vertex(f, [&] (CMap2::Vertex v){
 
@@ -380,22 +385,25 @@ void Plugin_SurfaceFeatureLines::compute_feature_lines(
 //void add_lines(std::vector<VEC3>& line_vec, VEC3 O,VEC3 v1, VEC3 v2, double scal1, double scal2)
             if((grad_emax.dot(sum_Kmax)<0) && (std::abs(sum_kmax) > std::abs(sum_kmin))){
                 if(emax[v1] > 0 && emax[v2] < 0 && emax[v3] < 0){
-                    add_lines(position,lines, v1, v2, v3, -emax[v1]/(-emax[v1] + emax[v2]) , 1-(-emax[v1]/(-emax[v1] + emax[v2])));
+                    //add_lines(position,lines, v1, v2, v3, -emax[v1]/(-emax[v1] + emax[v2]) , 1-(-emax[v1]/(-emax[v1] + emax[v3])));
+                    add_lines(position,lines, v1, v2, v3, emax[v1]/(emax[v1] + -emax[v2]) , emax[v1]/(emax[v1] + -emax[v3]));
                 } else if (emax[v1] > 0 && emax[v2] > 0 && emax[v3] < 0){
-
+                    add_lines(position,lines, v3, v1, v2, -emax[v3]/(-emax[v3] + emax[v1]) , -emax[v3]/(-emax[v3] + emax[v2]));
                 } else if (emax[v1] < 0 && emax[v2] > 0 && emax[v3] < 0){
-
+                    add_lines(position,lines, v2, v1, v3, emax[v2]/(emax[v2] + (-emax[v1])) , emax[v2]/(emax[v2] + (-emax[v3])));
                 } else if (emax[v1] < 0 && emax[v2] > 0 && emax[v3] > 0){
-
+                    add_lines(position,lines, v1, v2, v3, -emax[v1]/(-emax[v1] + emax[v2]) , -emax[v1]/(-emax[v1] + emax[v3]));
                 } else if (emax[v1] < 0 && emax[v2] < 0 && emax[v3] > 0){
-
+                    add_lines(position,lines, v3, v1, v2, emax[v3]/(emax[v3] + -emax[v1]) , emax[v3]/(emax[v3] + -emax[v2]));
                 } else  if(emax[v1] > 0 && emax[v2] < 0 && emax[v3] > 0){
-
+                    add_lines(position,lines, v2, v1, v3, -emax[v2]/(-emax[v2] + (emax[v1])) , -emax[v2]/(-emax[v2] + (emax[v3])));
                 } else {
                     return;
                 }
             }
-        }
+        } else {
+            regularity[f] = false;
+             }
     });
 
 
