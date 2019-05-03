@@ -41,6 +41,33 @@ namespace plugin_cmap_provider { class CMap2Handler; }
 namespace plugin_surface_feature_lines
 {
 
+
+struct feature_point{
+    cgogn::Dart d;
+    double a;
+
+    feature_point(){}
+    feature_point(cgogn::Dart _d, double _a) : d(_d), a(_a){}
+
+    bool is_valid(){
+        if(!d.is_nil())
+            return true;
+        else
+            return false;
+    }
+    static std::string cgogn_name_of_type() { return std::string("feature_line_struct"); }
+    inline friend std::ostream& operator<<(std::ostream& out, const feature_point&)
+    {
+      return out;
+    }
+    inline friend std::istream& operator>> (std::istream& in, const feature_point&)
+    {
+      return in;
+    }
+};
+
+using feature_line = std::vector<feature_point>;
+
 class ComputeFeatureLines_Dialog;
 using CMap2Handler = plugin_cmap_provider::CMap2Handler;
 
@@ -112,7 +139,9 @@ public:
 		const QString& kmax_attribute_name,
 		const QString& Kmin_attribute_name,
 		const QString& kmin_attribute_name
-	);
+    );
+
+    std::vector<std::vector<feature_point>> feature_lines;
 
 private:
 
