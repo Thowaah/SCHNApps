@@ -32,6 +32,15 @@
 
 #include <schnapps/plugins/surface_selection/surface_selection.h>
 
+
+/////////////////////////:
+#include <chrono>  // for high_resolution_clock
+
+
+// Record start time
+
+/// /////////////////////////
+
 namespace schnapps
 {
 
@@ -409,7 +418,7 @@ CMap2::Edge find_start(CMap2* map, CMap2::Edge _e, CMap2::EdgeAttribute<feature_
     return first_valid_neighbour;
 }
 
-void build_fl(CMap2* map, CMap2::Edge _e, feature_line& fl, CMap2::CellMarker<CMap2::Edge::ORBIT>& cm, CMap2::EdgeAttribute<feature_point>& edge_fp, CMapCellsSetGen* csg){
+void build_fl(CMap2* map, CMap2::Edge _e, feature_line& fl, CMap2::CellMarker<CMap2::Edge::ORBIT>& cm, CMap2::EdgeAttribute<feature_point>& edge_fp){
     CMap2::Edge next_e = find_start(map, _e, edge_fp);
     fl.push_back(edge_fp[next_e]);
     //map->foreach_incident_vertex(next_e, [&](CMap2::Vertex v){csg->select(v.dart);});
@@ -503,13 +512,19 @@ void Plugin_SurfaceFeatureLines::compute_feature_lines(
 	const QString& kmin_attribute_name
 )
 {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    // Portion of code to be timed
+
+    // Record end time
+
 	CMap2* map = mh->map();
-    CMapCellsSetGen* csg_fl = mh->add_cells_set(CMap2::Vertex::ORBIT,"feature_lines");
-    csg_fl->set_mutually_exclusive(true);
-    plugin_cmap_provider::CMapCellsSet<CMap2Handler, CMap2::Vertex> csg(*mh, "feature line");
-    csg.set_mutually_exclusive(true);
-    CMapCellsSetGen* csg_outer = mh->add_cells_set(CMap2::Vertex::ORBIT, "flooding");
-    csg_outer->set_mutually_exclusive(true);
+//    CMapCellsSetGen* csg_fl = mh->add_cells_set(CMap2::Vertex::ORBIT,"feature_lines");
+//    csg_fl->set_mutually_exclusive(true);
+//    plugin_cmap_provider::CMapCellsSet<CMap2Handler, CMap2::Vertex> csg(*mh, "feature line");
+//    csg.set_mutually_exclusive(true);
+//    CMapCellsSetGen* csg_outer = mh->add_cells_set(CMap2::Vertex::ORBIT, "flooding");
+//    csg_outer->set_mutually_exclusive(true);
    // plugin_cmap_provider::CMapCellsSet<CMap2Handler, CMap2::Vertex> csgi_(*mh, "floodingtest");
 
 	CMap2::VertexAttribute<VEC3> position = map->get_attribute<VEC3, CMap2::Vertex::ORBIT>(position_attribute_name.toStdString());
@@ -623,7 +638,7 @@ void Plugin_SurfaceFeatureLines::compute_feature_lines(
 
             //lancer parcours de la ligne ET marque les sommets
             std::cout << "building feature line\n" << std::endl;
-            build_fl(map, em, fl, cm, edge_fp_max, &csg);
+            build_fl(map, em, fl, cm, edge_fp_max);
 
             //la mettre dans
             std::cout << "adding fl to vector\n" << std::endl;
@@ -635,21 +650,55 @@ void Plugin_SurfaceFeatureLines::compute_feature_lines(
     //enelever les fl plus petites que ...
     std::vector<feature_line> filtered_fls = filter(feature_lines_max, 50);
 
+    int n_fl = 0;
+
     for(auto& fl : filtered_fls){
+        plugin_cmap_provider::CMapCellsSet<CMap2Handler, CMap2::Vertex> csg_fl(*mh, QString::fromStdString("feature_line_" + std::to_string(n_fl)));
+        //csg_fl.set_mutually_exclusive(true);
+//        CMapCellsSetGen* csg_fl = mh->add_cells_set(CMap2::Vertex::ORBIT,QString::fromStdString("feature_lines_" + std::to_string(n_fl)));
+//        csg_fl->set_mutually_exclusive(true);
+        CMapCellsSetGen* csg = mh->add_cells_set(CMap2::Vertex::ORBIT, QString::fromStdString("feature_lines_" + std::to_string(n_fl)));
+        //csg->set_mutually_exclusive(true);
+        CMapCellsSetGen* csg_outer = mh->add_cells_set(CMap2::Vertex::ORBIT, QString::fromStdString("flooding_" + std::to_string(n_fl)));
+        //csg_outer->set_mutually_exclusive(true);
         for(auto& fp : fl){
             map->foreach_incident_vertex(CMap2::Edge(fp.d), [&](CMap2::Vertex v){
-                csg.select(v);
+                csg_fl.select(v);
+                csg->select(v.dart);
+                //csg.select(v);
             });
+        }
+        flood(map,&csg_fl,csg_outer,5);
+        n_fl++;
+    }
+
+//    csg.foreach_cell([&] (CMap2::Vertex v){
+//       csg_fl->select(v.dart);
+//    });
+
+    //inondation
+    //flood(map,&csg,csg_outer,5);
+    auto finish = std::chrono::high_resolution_clock::now();
+    int tabSize[10000];
+    for (int i=0;i<10000;i++) {
+        tabSize[i] = 0;
+    }
+    std::cout << "Tailles des lignes:" << std::endl;
+    for(auto& fl : feature_lines_max){
+        //std::cout << "\t" << fl.size() << std::endl;
+        tabSize[fl.size()]++;
+       // for(auto& fp : fl){}
+    }
+
+    for(int i=0;i<10000;i++){
+        if(tabSize[i]!=0){
+            std::cout << "\t" << i << ": "<< tabSize[i] << std::endl;
         }
     }
 
-    csg.foreach_cell([&] (CMap2::Vertex v){
-       csg_fl->select(v.dart);
-    });
+    std::chrono::duration<double> elapsed = finish - start;
 
-    //inondation
-    flood(map,&csg,csg_outer,5);
-
+    std::cout << "total compute time: " << elapsed.count() << std::endl;
 
 
 
